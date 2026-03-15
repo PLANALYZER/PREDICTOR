@@ -12,15 +12,10 @@ HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports
 BIG_TEAMS = ["Barcelona", "Real Madrid", "Bayern Munich", "Manchester City", "Liverpool", "Inter", "AC Milan", "Napoli", "Paris Saint Germain", "Ajax", "PSV Eindhoven"]
 
 LEAGUE_STATS = {
-    135: {"name": "Serie A", "avg": 2.58, "type": "tattico"}, 
-    136: {"name": "Serie B", "avg": 2.25, "type": "chiuso"},
-    39: {"name": "Premier League", "avg": 2.85, "type": "aperto"}, 
-    78: {"name": "Bundesliga", "avg": 3.15, "type": "aperto"},
-    88: {"name": "Eredivisie", "avg": 3.10, "type": "aperto"}, 
-    140: {"name": "La Liga", "avg": 2.50, "type": "tattico"}, 
-    61: {"name": "Ligue 1", "avg": 2.60, "type": "tattico"},
-    207: {"name": "Super League (CH)", "avg": 2.98, "type": "aperto"}, # AGGIUNTA
-    208: {"name": "Challenge League", "avg": 3.05, "type": "aperto"}   # AGGIUNTA
+    135: {"name": "Serie A", "avg": 2.58, "type": "tattico"}, 136: {"name": "Serie B", "avg": 2.25, "type": "chiuso"},
+    39: {"name": "Premier League", "avg": 2.85, "type": "aperto"}, 78: {"name": "Bundesliga", "avg": 3.15, "type": "aperto"},
+    88: {"name": "Eredivisie", "avg": 3.10, "type": "aperto"}, 140: {"name": "La Liga", "avg": 2.50, "type": "tattico"}, 
+    61: {"name": "Ligue 1", "avg": 2.60, "type": "tattico"}
 }
 
 st.set_page_config(page_title="PREDICTOR AI PRO", layout="wide")
@@ -66,11 +61,13 @@ if st.button("🚀 AVVIA ANALISI SQUADRE"):
                         total_xg = round(xg_h + xg_a, 2)
                         
                         # --- MULTIGOL DINAMICI (Con 0-1 reale) ---
+                        # Casa (Se è Barcellona, l'xG vola e MG diventa 2-4)
                         if xg_h > 2.10: mg_c = "2-4"
                         elif xg_h > 1.40: mg_c = "1-3"
                         elif xg_h > 0.90: mg_c = "1-2"
                         else: mg_c = "0-1"
                         
+                        # Ospite
                         if xg_a > 1.90: mg_o = "2-3"
                         elif xg_a > 1.30: mg_o = "1-3"
                         elif xg_a > 0.80: mg_o = "1-2"
@@ -92,5 +89,5 @@ if st.button("🚀 AVVIA ANALISI SQUADRE"):
             
             if all_matches:
                 st.table(pd.DataFrame(all_matches))
-        except Exception as e:
-            st.error(f"Errore API: {e}")
+        except:
+            st.error("Errore API.")
