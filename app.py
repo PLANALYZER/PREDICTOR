@@ -19,8 +19,8 @@ LEAGUE_STATS = {
     88: {"name": "Eredivisie", "avg": 3.10, "type": "aperto"}, 
     140: {"name": "La Liga", "avg": 2.50, "type": "tattico"}, 
     61: {"name": "Ligue 1", "avg": 2.60, "type": "tattico"},
-    207: {"name": "Super League (CH)", "avg": 2.98, "type": "aperto"},
-    208: {"name": "Challenge League", "avg": 3.05, "type": "aperto"}
+    207: {"name": "Super League (CH)", "avg": 2.98, "type": "aperto"}, # AGGIUNTA
+    208: {"name": "Challenge League", "avg": 3.05, "type": "aperto"}   # AGGIUNTA
 }
 
 st.set_page_config(page_title="PREDICTOR AI PRO", layout="wide")
@@ -68,4 +68,29 @@ if st.button("🚀 AVVIA ANALISI SQUADRE"):
                         # --- MULTIGOL DINAMICI (Con 0-1 reale) ---
                         if xg_h > 2.10: mg_c = "2-4"
                         elif xg_h > 1.40: mg_c = "1-3"
-                        elif x
+                        elif xg_h > 0.90: mg_c = "1-2"
+                        else: mg_c = "0-1"
+                        
+                        if xg_a > 1.90: mg_o = "2-3"
+                        elif xg_a > 1.30: mg_o = "1-3"
+                        elif xg_a > 0.80: mg_o = "1-2"
+                        else: mg_o = "0-1"
+
+                        # Pronostico IA
+                        if total_xg < 2.20: tip = "UNDER 3.5"
+                        elif total_xg > 3.20: tip = "OVER 2.5"
+                        elif total_xg > 2.70: tip = "GOAL" if abs(xg_h - xg_a) < 0.6 else "OVER 1.5"
+                        else: tip = "OVER 1.5"
+
+                        all_matches.append({
+                            "Lega": LEAGUE_STATS[l_id]["name"],
+                            "Partita": f"{home_team} vs {away_team}",
+                            "xG Totali": total_xg,
+                            "Consiglio": tip,
+                            "Combo Multigol": f"CASA {mg_c} + OSP {mg_o}"
+                        })
+            
+            if all_matches:
+                st.table(pd.DataFrame(all_matches))
+        except Exception as e:
+            st.error(f"Errore API: {e}")
