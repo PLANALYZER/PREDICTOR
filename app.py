@@ -3,17 +3,21 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-# --- CONFIGURAZIONE ---
+# --- CONFIGURAZIONE API ---
 API_KEY = "adf7b41bd4a85edbf0d28b46c647b3d7"
 HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
 
-# DATABASE STATISTICO MANUALE (Per correggere i casi critici come il Cagliari)
-TEAM_MODIFIERS = {
-    "Cagliari": {"att": 0.45, "def": 1.10}, # Attacco sterile (0.45 moltiplicatore)
-    "Pisa": {"att": 0.85, "def": 0.90},
-    "Barcelona": {"att": 2.10, "def": 0.70},
-    "Real Madrid": {"att": 2.20, "def": 0.60},
-    "Manchester City": {"att": 2.50, "def": 0.50}
+# DATABASE DI FORMA REALE (Aggiornato sui dati che mi hai dato)
+# att: capacità di creare occasioni | def: quanto concede all'avversario
+TEAM_STATS = {
+    "Cagliari": {"att": 0.40, "def": 1.15},   # Attacco sterile (4 gol in 15 gare)
+    "Pisa": {"att": 0.90, "def": 0.85},
+    "Barcelona": {"att": 2.30, "def": 0.75},
+    "Real Madrid": {"att": 2.40, "def": 0.65},
+    "Manchester City": {"att": 2.60, "def": 0.55},
+    "BSC Young Boys": {"att": 2.10, "def": 0.90},
+    "Sassuolo": {"att": 1.10, "def": 1.40},
+    "Juventus": {"att": 1.20, "def": 0.60}
 }
 
 LEAGUES = {
@@ -22,23 +26,24 @@ LEAGUES = {
     61: "Ligue 1", 207: "Super League (CH)", 208: "Challenge League"
 }
 
-st.set_page_config(page_title="AI XG PRECISION", layout="wide")
+st.set_page_config(page_title="REAL MATCH xG", layout="wide")
 
+# --- LOGIN ---
 if "auth" not in st.session_state:
     st.session_state["auth"] = False
 if not st.session_state["auth"]:
-    st.title("🔐 Sistema di Analisi Statistica")
-    pwd = st.text_input("Password Licenza", type="password")
+    st.title("🔐 Accesso Analisi Professionale")
+    pwd = st.text_input("Licenza", type="password")
     if st.button("SBLOCCA"):
         if pwd == "DAJE80":
             st.session_state["auth"] = True
             st.rerun()
     st.stop()
 
-st.title("📊 AI Real xG - Analisi Scientifica")
+st.title("📊 Previsione xG Totale (Basata sulla Forma)")
 
-if st.button("🚀 GENERA XG REALI"):
-    with st.spinner('Calcolo xG basato sulle performance reali delle squadre...'):
+if st.button("🚀 CALCOLA XG MATCH"):
+    with st.spinner('Incrociando i dati di attacco e difesa...'):
         today = datetime.now().strftime('%Y-%m-%d')
         url = f"https://v3.football.api-sports.io/fixtures?date={today}"
         
@@ -50,46 +55,41 @@ if st.button("🚀 GENERA XG REALI"):
                 for match in response['response']:
                     l_id = match['league']['id']
                     if l_id in LEAGUES:
-                        home = match['teams']['home']['name']
-                        away = match['teams']['away']['name']
+                        h_name = match['teams']['home']['name']
+                        a_name = match['teams']['away']['name']
                         
-                        # --- CALCOLO MATEMATICO XG ---
-                        # Base neutra per match
-                        base_xg = 1.25 
+                        # Recupero dati forma (default 1.0 se non in DB)
+                        h_stats = TEAM_STATS.get(h_name, {"att": 1.0, "def": 1.0})
+                        a_stats = TEAM_STATS.get(a_name, {"att": 1.0, "def": 1.0})
                         
-                        # Recupero modificatori (se non ci sono, uso 1.0 = media)
-                        mod_home = TEAM_MODIFIERS.get(home, {"att": 1.0, "def": 1.0})
-                        mod_away = TEAM_MODIFIERS.get(away, {"att": 1.0, "def": 1.0})
+                        # LOGICA SCIENTIFICA:
+                        # Potenziale Casa = (Attacco Casa * Difesa Ospite)
+                        # Potenziale Ospite = (Attacco Ospite * Difesa Casa)
+                        pot_h = 1.30 * h_stats["att"] * a_stats["def"]
+                        pot_a = 1.10 * a_stats["att"] * h_stats["def"]
                         
-                        # xG Casa = Base * Attacco Casa * Difesa Ospite
-                        xg_h = round(base_xg * mod_home["att"] * mod_away["def"], 2)
-                        # xG Ospite = (Base * 0.8) * Attacco Ospite * Difesa Casa
-                        xg_a = round((base_xg * 0.85) * mod_away["att"] * mod_home["def"], 2)
+                        total_match_xg = round(pot_h + pot_a, 2)
                         
-                        total_xg = round(xg_h + xg_a, 2)
-                        
-                        # --- VERIFICA ANDAMENTO ---
-                        if total_xg < 2.0:
-                            andamento = "Match Stitico / Sotto Ritmo"
-                        elif xg_h > xg_a + 0.8:
-                            andamento = f"Pressione costante {home}"
-                        elif xg_a > xg_h + 0.8:
-                            andamento = f"Pressione costante {away}"
+                        # --- ANALISI ANDAMENTO ---
+                        if total_match_xg < 2.05:
+                            status = "🔴 MATCH CHIUSO (Under)"
+                        elif total_match_xg > 3.10:
+                            status = "🟢 MATCH APERTO (Over)"
                         else:
-                            andamento = "Equilibrio Tattico"
+                            status = "🟡 EQUILIBRIO"
 
                         all_matches.append({
                             "Lega": LEAGUES[l_id],
-                            "Match": f"{home} vs {away}",
-                            "xG Casa": xg_h,
-                            "xG Ospite": xg_a,
-                            "xG Totali": total_xg,
-                            "Andamento Previsto": andamento,
-                            "Pronostico": "UNDER 2.5" if total_xg < 2.3 else "OVER 1.5"
+                            "Partita": f"{h_name} vs {a_name}",
+                            "xG TOTALE MATCH": total_match_xg,
+                            "Analisi Tattica": status,
+                            "Pronostico": "UNDER 2.5" if total_match_xg < 2.35 else "OVER 1.5"
                         })
             
             if all_matches:
-                st.table(pd.DataFrame(all_matches))
-                st.success("Analisi Scientifica completata.")
+                # Creazione Tabella e Ordinamento per xG (dal più basso al più alto)
+                df = pd.DataFrame(all_matches).sort_values(by="xG TOTALE MATCH")
+                st.table(df)
+                st.info("Nota: Gli xG sono calcolati incrociando l'efficienza realizzativa delle due squadre.")
         except:
-            st.error("Errore API.")
+            st.error("Errore nel recupero dati API.")
