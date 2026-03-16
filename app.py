@@ -2,92 +2,83 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
-import random
 
 # --- CONFIGURAZIONE ---
 API_KEY = "adf7b41bd4a85edbf0d28b46c647b3d7"
 HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
 
-# SQUADRE ELITE (Per alzare xG oltre la media lega)
-BIG_TEAMS = ["Barcelona", "Real Madrid", "Bayern Munich", "Manchester City", "Liverpool", "Inter", "AC Milan", "Napoli", "Paris Saint Germain", "Ajax", "PSV Eindhoven"]
-
-LEAGUE_STATS = {
-    135: {"name": "Serie A", "avg": 2.58, "type": "tattico"}, 136: {"name": "Serie B", "avg": 2.25, "type": "chiuso"},
-    39: {"name": "Premier League", "avg": 2.85, "type": "aperto"}, 78: {"name": "Bundesliga", "avg": 3.15, "type": "aperto"},
-    88: {"name": "Eredivisie", "avg": 3.10, "type": "aperto"}, 140: {"name": "La Liga", "avg": 2.50, "type": "tattico"}, 
-    61: {"name": "Ligue 1", "avg": 2.60, "type": "tattico"}
+# MEDIE GOL REALI PER CAMPIONATO (Fondamentali per la formula)
+LEAGUE_DEFAULTS = {
+    135: {"name": "Serie A", "avg": 1.22},
+    136: {"name": "Serie B", "avg": 1.10},
+    39: {"name": "Premier League", "avg": 1.45},
+    78: {"name": "Bundesliga", "avg": 1.58},
+    88: {"name": "Eredivisie", "avg": 1.62},
+    140: {"name": "La Liga", "avg": 1.18},
+    61: {"name": "Ligue 1", "avg": 1.20},
+    207: {"name": "Super League (CH)", "avg": 1.40},
+    208: {"name": "Challenge League", "avg": 1.48}
 }
 
-st.set_page_config(page_title="PREDICTOR AI PRO", layout="wide")
+st.set_page_config(page_title="PROFESSIONAL xG ENGINE", layout="wide")
 
-if "auth" not in st.session_state:
-    st.session_state["auth"] = False
+def get_stats(league_id, team_id):
+    """Estrae i dati reali per alimentare la formula"""
+    url = f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season=2025&team={team_id}"
+    try:
+        res = requests.get(url, headers=HEADERS).json()
+        if 'response' in res and res['response']:
+            stats = res['response']['goals']
+            return float(stats['for']['average']['total']), float(stats['against']['average']['total'])
+    except:
+        pass
+    return 1.10, 1.20
+
+if "auth" not in st.session_state: st.session_state["auth"] = False
 if not st.session_state["auth"]:
-    st.title("🔐 Accesso Enterprise 2.0")
     pwd = st.text_input("Password", type="password")
     if st.button("SBLOCCA"):
-        if pwd == "DAJE80":
-            st.session_state["auth"] = True
-            st.rerun()
+        if pwd == "DAJE80": st.session_state["auth"] = True; st.rerun()
     st.stop()
 
-st.title("⚽ AI Predictor - Power Stats Edition")
+st.title("🔬 AI Professional xG Predictor")
 
-if st.button("🚀 AVVIA ANALISI SQUADRE"):
-    with st.spinner('Calcolando xG basati su Ranking Squadre...'):
-        today = datetime.now().strftime('%Y-%m-%d')
-        url = f"https://v3.football.api-sports.io/fixtures?date={today}"
+if st.button("🚀 GENERA ANALISI SCIENTIFICA"):
+    url = f"https://v3.football.api-sports.io/fixtures?date={datetime.now().strftime('%Y-%m-%d')}"
+    res_fix = requests.get(url, headers=HEADERS).json()
+    
+    if 'response' in res_fix:
+        matches = []
+        for f in res_fix['response']:
+            l_id = f['league']['id']
+            if l_id in LEAGUE_DEFAULTS:
+                h_name, h_id = f['teams']['home']['name'], f['teams']['home']['id']
+                a_name, a_id = f['teams']['away']['name'], f['teams']['away']['id']
+                
+                # DATI REALI
+                h_gf, h_gs = get_stats(l_id, h_id)
+                a_gf, a_gs = get_stats(l_id, a_id)
+                l_avg = LEAGUE_DEFAULTS[l_id]["avg"]
+                
+                # FORMULA DI POISSON APPLICATA
+                strength_h = (h_gf / l_avg) * (a_gs / l_avg)
+                strength_a = (a_gf / l_avg) * (h_gs / l_avg)
+                
+                final_xg_h = l_avg * strength_h
+                final_xg_a = l_avg * strength_a
+                total_xg = round(final_xg_h + final_xg_a, 2)
+                
+                # FILTRO REALTÀ (Cagliari, Pisa, etc.)
+                if h_gf < 0.8 or a_gf < 0.8: total_xg = round(total_xg * 0.85, 2)
+
+                matches.append({
+                    "Lega": LEAGUE_DEFAULTS[l_id]["name"],
+                    "Partita": f"{h_name} vs {a_name}",
+                    "Forza Casa": round(h_gf, 2),
+                    "Forza Ospite": round(a_gf, 2),
+                    "xG MATCH": total_xg,
+                    "Picks": "UNDER 2.5" if total_xg < 2.25 else "OVER 2.5" if total_xg > 2.90 else "OVER 1.5"
+                })
         
-        try:
-            response = requests.get(url, headers=HEADERS).json()
-            all_matches = []
-            
-            if 'response' in response and response['response']:
-                for match in response['response']:
-                    l_id = match['league']['id']
-                    if l_id in LEAGUE_STATS:
-                        home_team = match['teams']['home']['name']
-                        away_team = match['teams']['away']['name']
-                        media_l = LEAGUE_STATS[l_id]["avg"]
-                        
-                        # --- CALCOLO xG CON BONUS ELITE ---
-                        bonus_h = 0.8 if home_team in BIG_TEAMS else 0.0
-                        bonus_a = 0.7 if away_team in BIG_TEAMS else 0.0
-                        
-                        # Calcolo base pesato sulla lega + bonus squadra
-                        xg_h = round((media_l * 0.55) + bonus_h + random.uniform(-0.3, 0.3), 2)
-                        xg_a = round((media_l * 0.45) + bonus_a + random.uniform(-0.4, 0.2), 2)
-                        
-                        total_xg = round(xg_h + xg_a, 2)
-                        
-                        # --- MULTIGOL DINAMICI (Con 0-1 reale) ---
-                        # Casa (Se è Barcellona, l'xG vola e MG diventa 2-4)
-                        if xg_h > 2.10: mg_c = "2-4"
-                        elif xg_h > 1.40: mg_c = "1-3"
-                        elif xg_h > 0.90: mg_c = "1-2"
-                        else: mg_c = "0-1"
-                        
-                        # Ospite
-                        if xg_a > 1.90: mg_o = "2-3"
-                        elif xg_a > 1.30: mg_o = "1-3"
-                        elif xg_a > 0.80: mg_o = "1-2"
-                        else: mg_o = "0-1"
-
-                        # Pronostico IA
-                        if total_xg < 2.20: tip = "UNDER 3.5"
-                        elif total_xg > 3.20: tip = "OVER 2.5"
-                        elif total_xg > 2.70: tip = "GOAL" if abs(xg_h - xg_a) < 0.6 else "OVER 1.5"
-                        else: tip = "OVER 1.5"
-
-                        all_matches.append({
-                            "Lega": LEAGUE_STATS[l_id]["name"],
-                            "Partita": f"{home_team} vs {away_team}",
-                            "xG Totali": total_xg,
-                            "Consiglio": tip,
-                            "Combo Multigol": f"CASA {mg_c} + OSP {mg_o}"
-                        })
-            
-            if all_matches:
-                st.table(pd.DataFrame(all_matches))
-        except:
-            st.error("Errore API.")
+        if matches:
+            st.table(pd.DataFrame(matches).sort_values(by="xG MATCH"))
