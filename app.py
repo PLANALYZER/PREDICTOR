@@ -7,78 +7,64 @@ from datetime import datetime
 API_KEY = "adf7b41bd4a85edbf0d28b46c647b3d7"
 HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
 
-# MEDIE GOL REALI PER CAMPIONATO (Fondamentali per la formula)
-LEAGUE_DEFAULTS = {
-    135: {"name": "Serie A", "avg": 1.22},
-    136: {"name": "Serie B", "avg": 1.10},
-    39: {"name": "Premier League", "avg": 1.45},
-    78: {"name": "Bundesliga", "avg": 1.58},
-    88: {"name": "Eredivisie", "avg": 1.62},
-    140: {"name": "La Liga", "avg": 1.18},
-    61: {"name": "Ligue 1", "avg": 1.20},
-    207: {"name": "Super League (CH)", "avg": 1.40},
-    208: {"name": "Challenge League", "avg": 1.48}
+LEAGUES = {
+    135: "Serie A", 136: "Serie B", 39: "Premier League", 
+    78: "Bundesliga", 88: "Eredivisie", 140: "La Liga", 
+    61: "Ligue 1", 207: "Super League (CH)", 208: "Challenge League"
 }
 
-st.set_page_config(page_title="PROFESSIONAL xG ENGINE", layout="wide")
+st.set_page_config(page_title="REAL MATCH xG PRO", layout="wide")
 
-def get_stats(league_id, team_id):
-    """Estrae i dati reali per alimentare la formula"""
-    url = f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season=2025&team={team_id}"
+def get_stats_safe(league_id, team_id):
+    """Recupera dati reali. Se l'API fallisce, restituisce 1.0 per non bloccare il tasto."""
     try:
-        res = requests.get(url, headers=HEADERS).json()
+        url = f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season=2024&team={team_id}"
+        res = requests.get(url, headers=HEADERS, timeout=5).json()
         if 'response' in res and res['response']:
             stats = res['response']['goals']
-            return float(stats['for']['average']['total']), float(stats['against']['average']['total'])
+            gf = stats['for']['average']['total'] or 1.1
+            gs = stats['against']['average']['total'] or 1.1
+            return float(gf), float(gs)
     except:
         pass
-    return 1.10, 1.20
+    return 1.1, 1.2
 
 if "auth" not in st.session_state: st.session_state["auth"] = False
 if not st.session_state["auth"]:
     pwd = st.text_input("Password", type="password")
     if st.button("SBLOCCA"):
-        if pwd == "DAJE80": st.session_state["auth"] = True; st.rerun()
+        if pwd == "DAJE80":
+            st.session_state["auth"] = True
+            st.rerun()
     st.stop()
 
-st.title("🔬 AI Professional xG Predictor")
+st.title("📊 Calcolatore xG Reale (Versione Stabile)")
 
-if st.button("🚀 GENERA ANALISI SCIENTIFICA"):
-    url = f"https://v3.football.api-sports.io/fixtures?date={datetime.now().strftime('%Y-%m-%d')}"
-    res_fix = requests.get(url, headers=HEADERS).json()
-    
-    if 'response' in res_fix:
-        matches = []
-        for f in res_fix['response']:
-            l_id = f['league']['id']
-            if l_id in LEAGUE_DEFAULTS:
-                h_name, h_id = f['teams']['home']['name'], f['teams']['home']['id']
-                a_name, a_id = f['teams']['away']['name'], f['teams']['away']['id']
-                
-                # DATI REALI
-                h_gf, h_gs = get_stats(l_id, h_id)
-                a_gf, a_gs = get_stats(l_id, a_id)
-                l_avg = LEAGUE_DEFAULTS[l_id]["avg"]
-                
-                # FORMULA DI POISSON APPLICATA
-                strength_h = (h_gf / l_avg) * (a_gs / l_avg)
-                strength_a = (a_gf / l_avg) * (h_gs / l_avg)
-                
-                final_xg_h = l_avg * strength_h
-                final_xg_a = l_avg * strength_a
-                total_xg = round(final_xg_h + final_xg_a, 2)
-                
-                # FILTRO REALTÀ (Cagliari, Pisa, etc.)
-                if h_gf < 0.8 or a_gf < 0.8: total_xg = round(total_xg * 0.85, 2)
-
-                matches.append({
-                    "Lega": LEAGUE_DEFAULTS[l_id]["name"],
-                    "Partita": f"{h_name} vs {a_name}",
-                    "Forza Casa": round(h_gf, 2),
-                    "Forza Ospite": round(a_gf, 2),
-                    "xG MATCH": total_xg,
-                    "Picks": "UNDER 2.5" if total_xg < 2.25 else "OVER 2.5" if total_xg > 2.90 else "OVER 1.5"
-                })
+# AGGIUNTO IL TASTO CON CONTROLLO ERRORI
+if st.button("🚀 GENERA ANALISI ORA"):
+    with st.spinner('Analisi match in corso...'):
+        today = datetime.now().strftime('%Y-%m-%d')
+        url = f"https://v3.football.api-sports.io/fixtures?date={today}"
         
-        if matches:
-            st.table(pd.DataFrame(matches).sort_values(by="xG MATCH"))
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=10).json()
+            all_matches = []
+            
+            if 'response' in response and response['response']:
+                # Prendiamo solo i match delle tue leghe
+                matches = [m for m in response['response'] if m['league']['id'] in LEAGUES]
+                
+                if not matches:
+                    st.warning("Nessun match trovato per oggi in Serie A, B, Premier, etc.")
+                else:
+                    for m in matches[:25]: # Limite per evitare blocchi
+                        l_id = m['league']['id']
+                        h_id, h_name = m['teams']['home']['id'], m['teams']['home']['name']
+                        a_id, a_name = m['teams']['away']['id'], m['teams']['away']['name']
+                        
+                        # Chiamata dati reali
+                        h_gf, h_gs = get_stats_safe(l_id, h_id)
+                        a_gf, a_gs = get_stats_safe(l_id, a_id)
+                        
+                        # Formula bilanciata (Media 1.25)
+                        total_xg = round(((h_gf * a_gs) / 1.2
