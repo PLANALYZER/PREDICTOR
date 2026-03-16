@@ -3,39 +3,36 @@ import requests
 import pandas as pd
 from datetime import datetime
 
-# --- CONFIGURAZIONE ---
+# --- CONFIGURAZIONE CORE ---
 API_KEY = "adf7b41bd4a85edbf0d28b46c647b3d7"
 HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
 
-# Leghe da analizzare
+# Leghe monitorate (Aggiunta Eredivisie ID: 88)
 LEAGUES = {
     135: "Serie A", 136: "Serie B", 39: "Premier League", 
     78: "Bundesliga", 88: "Eredivisie", 140: "La Liga", 
     61: "Ligue 1", 207: "Super League (CH)", 208: "Challenge League"
 }
 
-st.set_page_config(page_title="XG PREDICTOR 16.03", layout="wide")
+st.set_page_config(page_title="AI XG PRECISION 16.03", layout="wide")
 
-def get_real_stats(l_id, t_id):
-    """Recupera le medie gol reali della stagione 2025/26"""
+def get_stats_safe(l_id, t_id):
+    """Recupera medie gol reali. Se l'API fallisce, usa un valore neutro per non bloccare il tasto."""
     try:
         url = f"https://v3.football.api-sports.io/teams/statistics?league={l_id}&season=2025&team={t_id}"
         res = requests.get(url, headers=HEADERS, timeout=5).json()
         if 'response' in res and res['response']:
-            g = res['response']['goals']
-            gf = float(g['for']['average']['total']) if g['for']['average']['total'] else 1.1
-            gs = float(g['against']['average']['total']) if g['against']['average']['total'] else 1.1
+            stats = res['response']['goals']
+            gf = float(stats['for']['average']['total']) if stats['for']['average']['total'] else 1.2
+            gs = float(stats['against']['average']['total']) if stats['against']['against']['total'] else 1.2
             return gf, gs
     except:
         pass
-    return 1.1, 1.2
+    return 1.2, 1.2
 
 # --- LOGIN ---
-if "auth" not in st.session_state:
-    st.session_state["auth"] = False
-
+if "auth" not in st.session_state: st.session_state["auth"] = False
 if not st.session_state["auth"]:
-    st.title("🔐 Accesso 16.03.2026")
     pwd = st.text_input("Password", type="password")
     if st.button("SBLOCCA"):
         if pwd == "DAJE80":
@@ -44,52 +41,54 @@ if not st.session_state["auth"]:
     st.stop()
 
 # --- INTERFACCIA ---
-st.title("⚽ AI Predictor - Match del 16 Marzo 2026")
+st.title("📊 AI Real-Stats xG Predictor - 16 Marzo 2026")
 
-if st.button("🚀 ANALIZZA PARTITE DI OGGI"):
-    with st.spinner('Calcolo xG in tempo reale...'):
+if st.button("🚀 GENERA ANALISI SCIENTIFICA"):
+    with st.spinner('Scansione database leghe (inclusa Eredivisie)...'):
         # Data impostata correttamente per oggi
         today = "2026-03-16"
         url_fix = f"https://v3.football.api-sports.io/fixtures?date={today}"
         
         try:
-            res_fix = requests.get(url_fix, headers=HEADERS, timeout=10).json()
-            results = []
+            response = requests.get(url_fix, headers=HEADERS, timeout=10).json()
+            all_matches = []
             
-            if 'response' in res_fix and res_fix['response']:
-                fixtures = [f for f in res_fix['response'] if f['league']['id'] in LEAGUES]
+            if 'response' in response and response['response']:
+                # Filtriamo solo i match delle leghe autorizzate
+                fixtures = [f for f in response['response'] if f['league']['id'] in LEAGUES]
                 
                 for f in fixtures:
                     l_id = f['league']['id']
                     h_n, h_id = f['teams']['home']['name'], f['teams']['home']['id']
                     a_n, a_id = f['teams']['away']['name'], f['teams']['away']['id']
                     
-                    # 1. Recupero dati reali (GF = Gol Fatti, GS = Gol Subiti)
-                    h_gf, h_gs = get_real_stats(l_id, h_id)
-                    a_gf, a_gs = get_real_stats(l_id, a_id)
+                    # Recupero statistiche reali
+                    h_gf, h_gs = get_stats_safe(l_id, h_id)
+                    a_gf, a_gs = get_stats_safe(l_id, a_id)
                     
-                    # 2. Formula xG Incrociata (Normalizzata su media 1.25)
-                    xg_h = (h_gf * a_gs) / 1.25
-                    xg_a = (a_gf * h_gs) / 1.25
+                    # Formula xG bilanciata su media 1.3
+                    xg_h = (h_gf * a_gs) / 1.3
+                    xg_a = (a_gf * h_gs) / 1.3
                     total_xg = round(xg_h + xg_a, 2)
                     
-                    # 3. Filtro per squadre Under (Pisa, Cagliari, etc.)
-                    if any(x in [h_n, a_n] for x in ["Cagliari", "Pisa", "Empoli"]):
-                        total_xg = round(total_xg * 0.82, 2)
+                    # Correzione automatica per squadre "stagnanti"
+                    if any(x in [h_n, a_n] for x in ["Cagliari", "Pisa", "Sassuolo"]):
+                        total_xg = round(total_xg * 0.85, 2)
 
-                    results.append({
+                    all_matches.append({
                         "Lega": LEAGUES[l_id],
-                        "Incontro": f"{h_n} vs {a_n}",
+                        "Match": f"{h_n} vs {a_n}",
                         "xG Totale": total_xg,
                         "Pronostico": "UNDER 2.5" if total_xg < 2.25 else "OVER 1.5",
-                        "Analisi": "MATCH CHIUSO" if total_xg < 1.90 else "ATTACCO FORTE" if total_xg > 2.80 else "EQUILIBRIO"
+                        "Trend": "MOLTO CHIUSO" if total_xg < 1.80 else "APERTO" if total_xg > 2.70 else "EQUILIBRATO"
                     })
                 
-                if results:
-                    st.table(pd.DataFrame(results).sort_values(by="xG Totale"))
+                if all_matches:
+                    df = pd.DataFrame(all_matches).sort_values(by="xG Totale")
+                    st.table(df)
                 else:
-                    st.warning("Nessun match trovato per le leghe selezionate in data odierna.")
+                    st.info("Nessun match trovato per le leghe selezionate oggi.")
             else:
-                st.error("Errore di connessione all'API delle partite.")
+                st.error("L'API non ha restituito match. Verifica la tua connessione o riprova tra poco.")
         except Exception as e:
-            st.error(f"Errore tecnico: {e}")
+            st.error(f"Errore tecnico durante la generazione: {e}")
